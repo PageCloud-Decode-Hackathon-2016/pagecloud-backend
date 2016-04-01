@@ -4,6 +4,7 @@ from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 from urlparse import urlparse
+from robot_detection import is_robot
 
 app = Flask(__name__)
 api = Api(app)
@@ -74,8 +75,13 @@ class Geo(Resource):
 
         return results
 
+class Bots(Resource):
+    def get(self):
+        pass
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
+api.add_resource(Bots, '/bots')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
