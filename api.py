@@ -102,9 +102,44 @@ class Bots(Resource):
         return results
 
 
+# The most popular/visited pages on the website
+class Pages(Resource):
+# TODO: exclude bots, only check for page visits on UNIQUE visitors
+# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
+    def get(self):
+        results = {
+            'data': {
+                'pages': []
+            }
+        }
+        # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        pages = Counter()
+
+        for hit in response['hits']['hits']:
+            pages[hit['fields']['request'][0]] +=1
+
+        pages = pages.most_common(None)
+
+        for entry in pages:
+            page, count = entry
+            results['data']['pages'].append(
+                {
+                    'name': page,
+                    'hits': count,
+                    'lastModified': 'IMPLEMENT ME' # how can we get page's last modified date?
+                })
+
+        return results
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Bots, '/bots')
+api.add_resource(Pages, '/pages')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
