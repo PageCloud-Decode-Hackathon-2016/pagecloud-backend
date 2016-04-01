@@ -1,10 +1,8 @@
 from collections import Counter
-from collections import defaultdict
 from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-import json
 from urlparse import urlparse
 from robot_detection import is_robot
 
@@ -18,8 +16,12 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
-        counts = defaultdict(int)
-        results = []
+        freq = Counter()
+        results = {
+        	'data': {
+        		'referrers': []
+        	}
+        }
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
@@ -29,17 +31,18 @@ class Referrers(Resource):
 
         for hit in response['hits']['hits']:
             url = urlparse(hit['fields']['referrer'][0].replace('"', '')).netloc
-            counts[url] = counts.get(url, 0) + 1
+            freq[url] += 1
 
-        for site in counts.keys():
-            results.append({
-                'name': site,
-                'count': counts[site]
-            })
+        freq = freq.most_common(None)
+        for entry in freq:
+            site, count = entry
+            results['data']['referrers'].append(
+                {
+                    'name': site,
+                    'count': count
+                })
 
-        return {
-            'data': results
-        }
+        return results
 
 class Geo(Resource):
     def get(self):
