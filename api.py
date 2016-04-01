@@ -1,8 +1,11 @@
+from collections import Counter
 from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 import json
+
+
 
 app = Flask(__name__)
 api = Api(app)
@@ -41,13 +44,34 @@ class Referrers(Resource):
 
 class Geo(Resource):
     def get(self):
-        results = []
+        results = {
+        	'data': {
+        		'geo': []
+        	}
+        }
 
         s = Search(using=client, index='production-logs-*')\
-            .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
+            .fields(['geoip.country_code3'])\
             .query('match_all')
 
-        return s.execute().to_dict()
+        response = s.execute().to_dict()
+
+        cntry = Counter()
+
+        for hit in response['hits']['hits']:
+            cntry[hit['fields']['geoip.country_code3'][0]] +=1
+
+        cntry = cntry.most_common(None)
+
+        for entry in cntry:
+            country, count = entry
+            results['data']['geo'].append(
+        		{
+        			'country': country,
+        			'count': count
+        		})
+
+        return results
 
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
