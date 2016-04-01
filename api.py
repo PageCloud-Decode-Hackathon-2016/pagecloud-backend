@@ -14,7 +14,11 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
-        results = []
+        results = {
+        	'data': {
+        		'referrers': []
+        	}
+        }
 
         # s = Search(using=client, index='production-logs-*')\
         #     .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
@@ -27,7 +31,11 @@ class Referrers(Resource):
         response = s.execute().to_dict()
 
         for hit in response['hits']['hits']:
-        	results.append(hit['fields']['referrer'][0].replace('"', ''))
+        	results['data']['referrers'].append(
+        		{
+        			'name': hit['fields']['referrer'][0].replace('"', ''), 
+        			'count': 21
+        		})
 
         return results
 
