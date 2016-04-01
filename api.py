@@ -7,8 +7,6 @@ from elasticsearch_dsl import Search, Q
 import json
 from urlparse import urlparse
 
-
-
 app = Flask(__name__)
 api = Api(app)
 
