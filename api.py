@@ -3,7 +3,6 @@ from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-import json
 from urlparse import urlparse
 from robot_detection import is_robot
 
@@ -45,6 +44,7 @@ class Referrers(Resource):
             }
         }
 
+
 class Geo(Resource):
     def get(self):
         results = []
@@ -71,12 +71,13 @@ class Geo(Resource):
             }
         }
 
+
 class Bots(Resource):
     def get(self):
         results = {
-                'data': {
-                    'bots': []
-                }
+            'data': {
+                'bots': []
+            }
         }
 
         s = Search(using=client, index='production-logs-*')\
@@ -99,6 +100,7 @@ class Bots(Resource):
             })
 
         return results
+
 
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
