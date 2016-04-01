@@ -31,7 +31,18 @@ class Referrers(Resource):
 
         return results
 
+class Geo(Resource):
+    def get(self):
+        results = []
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
+            .query('match_all')
+
+        return s.execute().to_dict()
+
 api.add_resource(Referrers, '/referrers')
+api.add_resource(Geo, '/geo')
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0',debug=True)
