@@ -22,8 +22,8 @@ class Referrers(Resource):
         counts = defaultdict(int)
         results = []
 
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['referrer'])\
+        s = Search(using=client, index='production-logs-*') \
+            .fields(['referrer']) \
             .query('match_all')
 
         response = s.execute().to_dict()
