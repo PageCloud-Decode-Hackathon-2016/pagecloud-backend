@@ -16,11 +16,20 @@ class Referrers(Resource):
     def get(self):
         results = []
 
+        # s = Search(using=client, index='production-logs-*')\
+        #     .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
+        #     .query('match_all')
+
         s = Search(using=client, index='production-logs-*')\
-            .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
+            .fields(['referrer'])\
             .query('match_all')
 
-        return s.execute().to_dict()
+        response = s.execute().to_dict()
+
+        for hit in response['hits']['hits']:
+        	results.append(hit['fields']['referrer'][0].replace('"', ''))
+
+        return results
 
 api.add_resource(Referrers, '/referrers')
 
