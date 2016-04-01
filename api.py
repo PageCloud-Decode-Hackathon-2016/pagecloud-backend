@@ -6,6 +6,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 import json
 from urlparse import urlparse
+from robot_detection import is_robot
 
 app = Flask(__name__)
 api = Api(app)
@@ -22,30 +23,6 @@ class Referrers(Resource):
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
-
-        for hit in response['hits']['hits']:
-            url = urlparse(hit['fields']['referrer'][0].replace('"', '')).netloc
-            counts[url] = counts.get(url, 0) + 1
-
-        for site in counts.keys():
-            results.append({
-                'name': site,
-                'count': counts[site]
-            })
-
-        return {
-            'data': results
-        }
-
-class Geo(Resource):
-    def get(self):
-        results = []
-
-        s = Search(using=client, index='production-logs-*') \
-            .fields(['referrer']) \
             .query('match_all')
 
         response = s.execute().to_dict()
@@ -95,8 +72,13 @@ class Geo(Resource):
 
         return results
 
+class Bots(Resource):
+    def get(self):
+        pass
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
+api.add_resource(Bots, '/bots')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
