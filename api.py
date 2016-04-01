@@ -16,21 +16,13 @@ class Referrers(Resource):
     def get(self):
         results = []
 
-        s = Search(using=client, index='production-logs-*') \
-            .fields(['agent', 'clientip', 'referrer', 'timestamp']) \
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
             .query('match_all')
 
-        for row in s.scan():
-            try:
-                results.append({
-                    'referrer': row.referrer[0]
-                })
-            except AttributeError as ex:
-                print(ex)
+        return s.execute().to_dict()
 
-        return results
-
-api.add_resource(Requests, '/referrers')
+api.add_resource(Referrers, '/referrers')
 
 if __name__ == '__main__':
     app.run(debug=True)
