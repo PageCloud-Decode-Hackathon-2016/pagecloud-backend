@@ -4,7 +4,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 from flask import Flask
 from flask_restful import Resource, Api
-from robot_detection import is_robot
+import user_agents
 import time
 from urlparse import urlparse
 
@@ -75,22 +75,36 @@ class Bots(Resource):
     def get(self):
         results = []
         agents = Counter()
+        categories = Counter()
         total = 0
 
         for req in requests:
             total += 1
-            agent = req.get('agent', ['-'])[0].replace('"', '')
+            agent = user_agents.parse(req.get('agent', ['-'])[0].replace('"', ''))
+            agents[agent.browser.family] += 1
 
-            if is_robot(agent) == False:
-                continue
-
-            agents[agent] += 1
+            if agent.is_mobile:
+                categories['mobile'] += 1
+            elif agent.is_tablet:
+                categories['tablet'] += 1
+            elif agent.is_pc:
+                categories['pc'] += 1
+            elif agent.is_bot:
+                categories['bot'] += 1
 
         for agent in agents.keys():
             results.append({
                 'name': agent,
                 'count': agents[agent]
             })
+
+        return {
+            'data': {
+                'count': sum(categories.values()),
+                'categories': categories,
+                'agents': results
+            }
+        }
 
 class Path(Resource):
     def get(self):
@@ -190,4 +204,4 @@ api.add_resource(Pages, '/pages')
 api.add_resource(AggregationTestResource, '/aggtest')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+    app.run(host='0.0.0.0', debug=True)
