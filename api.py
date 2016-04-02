@@ -16,8 +16,17 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
+<<<<<<< HEAD
         counts = Counter()
         results = []
+=======
+        freq = Counter()
+        results = {
+        	'data': {
+        		'referrers': []
+        	}
+        }
+>>>>>>> 73356c68623bc31860aabe899fee8f591f240ad6
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
@@ -27,6 +36,7 @@ class Referrers(Resource):
             response = hit.to_dict()
             url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
 
+<<<<<<< HEAD
             if url[:4] == 'www.':
                 url =  url[4:]
 
@@ -43,6 +53,22 @@ class Referrers(Resource):
                 'referrers': results
             }
         }
+=======
+        for hit in response['hits']['hits']:
+            url = urlparse(hit['fields']['referrer'][0].replace('"', '')).netloc
+            freq[url] += 1
+
+        freq = freq.most_common(None)
+        for entry in freq:
+            site, count = entry
+            results['data']['referrers'].append(
+                {
+                    'name': site,
+                    'count': count
+                })
+
+        return results
+>>>>>>> 73356c68623bc31860aabe899fee8f591f240ad6
 
 class Geo(Resource):
     def get(self):
@@ -157,11 +183,66 @@ class Path(Resource):
         #
         return response
 
+class Path(Resource):
+    def get(self):
+        results = {
+        	'data': {
+        		'path': []
+        	}
+        }
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request', 'clientip', 'timestamp'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+
+        clientVisits = []
+
+        #Create Sequences by grouping Client IP
+
+        #
+        return response
+
+# The most popular/visited pages on the website
+class Pages(Resource):
+# TODO: exclude bots, only check for page visits on UNIQUE visitors
+# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
+    def get(self):
+        results = {
+            'data': {
+                'pages': []
+            }
+        }
+        # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        pages = Counter()
+
+        for hit in response['hits']['hits']:
+            pages[hit['fields']['request'][0]] +=1
+
+        pages = pages.most_common(None)
+
+        for entry in pages:
+            page, count = entry
+            results['data']['pages'].append(
+                {
+                    'name': page,
+                    'hits': count,
+                    'lastModified': 'IMPLEMENT ME' # how can we get page's last modified date?
+                })
+
+        return results
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Bots, '/bots')
-api.add_resource(Pages, '/pages')
 api.add_resource(Path, '/path')
+api.add_resource(Pages, '/pages')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
