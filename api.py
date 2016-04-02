@@ -166,12 +166,16 @@ class Path(Resource):
         }
 
         s = Search(using=client, index='production-logs-*')\
-            .fields(['request', 'clientip', 'timestamp'])\
+            .fields(['clientip'])\
+            .
             .query('match_all')
 
         response = s.execute().to_dict()
+        clientVisits = [][]
+        nClients = 0
 
-        clientVisits = []
+        for hit in s['hits']['hits']:
+            clientVisits[nClients][0] = hit['feilds']['clientip'][0]
 
         #Create Sequences by grouping Client IP
 
