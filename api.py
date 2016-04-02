@@ -1,7 +1,7 @@
 from collections import defaultdict
 from collections import Counter
 from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search, Q
+from elasticsearch_dsl import Search, Q, A
 from flask import Flask
 from flask_restful import Resource, Api
 import user_agents
@@ -18,7 +18,7 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 requests = []
 for hit in Search(using=client, index='production-logs-*')\
-                 .fields(['referrer', 'agent', 'geoip.country_code3'])\
+                 .fields(['referrer', 'agent', 'geoip.country_code3', 'clientip'])\
                  .query('match_all')\
                  .scan():
     requests.append(hit.to_dict())
@@ -108,35 +108,45 @@ class Bots(Resource):
 
 class Path(Resource):
     def get(self):
-        results = {
+        results = []
+        clients = Counter()
+
+        for req in requests:
+            ip = req.get('clientip', ['-'])[0]
+            clients[ip] += 1
+        path =[]
+
+        for visitor in clients.keys()[:40]:
+            pages =[]
+            s = Search(using=client, index='production-logs-*')\
+                 .fields(['clientip', 'request'])\
+                 .query('match', clientip=visitor)
+
+            for page in s.scan():
+                page = page.to_dict().get('request', [''])[0]
+                print page
+                if not (page.find('.') > -1):
+                    print "true"
+                    pages.append(page)
+            path.append(pages)
+
+        freqPath = Counter()
+
+        for elem in path:
+            freqPath['['+ '\',\''.join(elem) +']']+=1
+
+        data = []
+        for elem in freqPath.keys():
+            data.append({
+                'node': elem,
+                'count': freqPath[elem]
+            })
+
+        return {
             'data': {
-                'path': []
+                'path': data
             }
         }
-
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['request', 'clientip', 'timestamp'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
-
-        clientVisits = []
-
-        #Create Sequences by grouping Client IP
-        for request in response['hits']['hits']:
-            pass
-
-        return response
-
-        for entry in cntry:
-            country, count = entry
-            results['data']['geo'].append(
-                {
-                    'country': country,
-                    'count': count
-                })
-
-        return results
 
 
 
