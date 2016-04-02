@@ -16,17 +16,8 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
-<<<<<<< HEAD
         counts = Counter()
         results = []
-=======
-        freq = Counter()
-        results = {
-        	'data': {
-        		'referrers': []
-        	}
-        }
->>>>>>> 73356c68623bc31860aabe899fee8f591f240ad6
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
@@ -36,7 +27,6 @@ class Referrers(Resource):
             response = hit.to_dict()
             url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
 
-<<<<<<< HEAD
             if url[:4] == 'www.':
                 url =  url[4:]
 
@@ -53,22 +43,6 @@ class Referrers(Resource):
                 'referrers': results
             }
         }
-=======
-        for hit in response['hits']['hits']:
-            url = urlparse(hit['fields']['referrer'][0].replace('"', '')).netloc
-            freq[url] += 1
-
-        freq = freq.most_common(None)
-        for entry in freq:
-            site, count = entry
-            results['data']['referrers'].append(
-                {
-                    'name': site,
-                    'count': count
-                })
-
-        return results
->>>>>>> 73356c68623bc31860aabe899fee8f591f240ad6
 
 class Geo(Resource):
     def get(self):
