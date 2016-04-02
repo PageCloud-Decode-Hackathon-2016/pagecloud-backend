@@ -6,6 +6,7 @@ from elasticsearch_dsl import Search, Q, A
 from urlparse import urlparse
 from robot_detection import is_robot
 import requests
+import datetime
 import re
 
 app = Flask(__name__)
@@ -140,19 +141,9 @@ class Path(Resource):
 # The most popular/visited pages on the website
 class Pages(Resource):
 # TODO: exclude bots, only check for page visits on UNIQUE visitors
-# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
-
-# HOW TO GET LAST DATE MODIFIED
-# 1. Access the page's /manifest.json
-# 2. Get the pages/lastModified datetime (using Python Requests)
-#   -> convert to dictionary and get the datetime, convert to a datetime object
     def get(self):
         pages = Counter()
         results = []
-
-        # NOTE: get the lastmodified dates from pagecloud
-        # but only get the data from decode-pagecloud
-        #  !!!!!
 
         # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
         all_pages = {}
@@ -168,33 +159,33 @@ class Pages(Resource):
             .fields(['request'])\
             .query('match_all')
 
-        url = "http://decode-2016.pagecloud.io/"
-        decodeManifest = requests.get(url + 'manifest.json')
-
         for hit in s.scan():
             response = hit.to_dict()
             p = response.get('request', [''])[0]
             pages[p] += 1
 
         for page in pages.keys():
-            if page[1:] in all_pages.keys():
-                # import pdb;pdb.set_trace() # <--- USE FOR DEBUGGING
-                lm = all_pages[page[1:]]
-            elif page == '':
+            
+            # Sanitize page name format (remove all parameters after '?') to find modifiedDate
+            cleanPage = page
+            if re.search('\?', page) != None:
+                match = re.search('(.*)\?', page)
+                cleanPage = match.group(1)
+
+            if cleanPage[1:] in all_pages.keys():
+                lm = all_pages[cleanPage[1:]]
+            elif cleanPage == '':
                 lm = all_pages['home']
             else:
                 lm = 0 # page could not be found in manifest list (might be referrer link!)
-
-            # Sanitize page name format
-            if re.search('\?', page) != None:
-            	match = re.search('(.*)\?', page)
-            	page = match.group(1)
+            
+            if lm > 0:
+                lm = datetime.datetime.fromtimestamp(lm / 1000).strftime("%Y-%m-%d")#T%H:%M:%S")
 
             results.append({
                 'name': page,
                 'hits': pages[page],
                 'lastModified': lm
-
             })
 
         return {
@@ -202,41 +193,7 @@ class Pages(Resource):
                 'pages': results
             }
         }
-
-        # for hit in response['hits']['hits']:
-        #     pages[hit['fields']['request'][0]] +=1
-
-        # pages = pages.most_common(None)
-
-        # for entry in pages:
-        #     page, count = entry
-
-        #     results['data']['pages'].append(
-        #         {
-        #             'name': page,
-        #             'hits': count,
-        #             'bla': manifest.json()['pages'][0]['name']
-        #             # 'lastModified': "TODO"
-        #         })
-
-        # for hit in s.scan():
-        #     response = hit.to_dict()
-        #     c = response.get('geoip.country_code3', [''])[0]
-        #     countries[c.upper()] += 1
-
-        # for country in countries.keys():
-        #     results.append({
-        #         'country': country,
-        #         'count': countries[country]
-        #     })
-
-        # return {
-        #     'data': {
-        #         'geo': results
-        #     }
-        # }
-
-        # return results
+    # import pdb; pdb.set_trace() # <--- USE FOR DEBUGGING
 
 
 class AggregationTestResource(Resource):
