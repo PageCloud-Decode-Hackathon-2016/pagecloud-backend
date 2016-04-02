@@ -133,12 +133,12 @@ class Path(Resource):
         freqPath = Counter()
 
         for elem in path:
-            freqPath['['+ '\',\''.join(elem) +']']+=1
+            freqPath['['+ ','.join(str('\''+ x + '\'') for x in elem)+']']+=1
 
         data = []
         for elem in freqPath.keys():
             data.append({
-                'node': elem,
+                'node': elem[1:-1],
                 'count': freqPath[elem]
             })
 
@@ -147,7 +147,6 @@ class Path(Resource):
                 'path': data
             }
         }
-
 
 
 # The most popular/visited pages on the website
