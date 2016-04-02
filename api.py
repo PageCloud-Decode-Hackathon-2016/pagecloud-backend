@@ -36,7 +36,7 @@ class Referrers(Resource):
         for hit in response['hits']['hits']:
         	results['data']['referrers'].append(
         		{
-        			'name': hit['fields']['referrer'][0].replace('"', ''), 
+        			'name': hit['fields']['referrer'][0].replace('"', ''),
         			'count': 21
         		})
 
@@ -56,7 +56,7 @@ class Geo(Resource):
 
         response = s.execute().to_dict()
 
-        cntry = Counter()
+        cntry = uniqueCounter()
 
         for hit in response['hits']['hits']:
             cntry[hit['fields']['geoip.country_code3'][0]] +=1
@@ -73,8 +73,84 @@ class Geo(Resource):
 
         return results
 
+class Unique(Resource):
+    def get(self):
+    
+        results = {
+            'data':{
+                'unique':[],
+                'nonunique':[]
+            }
+        }
+
+        # HOUR
+        hourSearch = Search(using=client, index='production-logs-*')\
+        .fields(['clientip','timestamp'])\
+        .query('match_all')\
+        .filter("range", **{'@timestamp': {'gte': 'now-1h'}})
+        
+        hourDict = hourSearch.scan().to_dict()['hits']['hits']
+        results['data']['nonunique'].append({
+            'datetime': 'hour',
+            'count': len(hourDict)
+        })
+        
+        hourCounter = Counter()
+        for i in hourDict:
+            hourCounter[i['fields']['clientip'][0]]+=1
+        
+        results['data']['unique'].append({
+            'datetime': 'hour',
+            'count': len(hourCounter)
+        })
+        
+         # DAY
+        daySearch = Search(using=client, index='production-logs-*')\
+        .fields(['clientip','timestamp'])\
+        .query('match_all')\
+        .filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
+        
+        dayDict = daySearch.scan().to_dict()['hits']['hits']
+        results['data']['nonunique'].append({
+            'datetime': 'days',
+            'count': len(dayDict)
+        })
+        
+        dayCounter = Counter()
+        for i in dayDict:
+            dayCounter[i['fields']['clientip'][0]]+=1
+        
+        results['data']['unique'].append({
+            'datetime': 'days',
+            'count': len(dayCounter)
+        })
+        
+        # WEEK 
+        weekSearch = Search(using=client, index='production-logs-*')\
+        .fields(['clientip','timestamp'])\
+        .query('match_all')\
+        .filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
+        
+        weekDict = weekSearch.scan().to_dict()['hits']['hits']
+        results['data']['nonunique'].append({
+            'datetime': 'week',
+            'count': len(weekDict)
+        })
+        
+        weekCounter = Counter()
+        for i in weekDict:
+            weekCounter[i['fields']['clientip'][0]]+=1
+        
+        results['data']['unique'].append({
+            'datetime': 'week',
+            'count': len(weekCounter)
+        })
+
+        return results
+        
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
+api.add_resource(Unique, '/unique')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
