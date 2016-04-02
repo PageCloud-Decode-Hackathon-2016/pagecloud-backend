@@ -20,19 +20,19 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
                        use_ssl=True,
                        verify_certs=False)
 
-requests = []
+_requests = []
 for hit in Search(using=client, index='production-logs-*')\
                  .fields(['referrer', 'agent', 'geoip.country_code3', 'clientip'])\
                  .query('match_all')\
                  .scan():
-    requests.append(hit.to_dict())
+    _requests.append(hit.to_dict())
 
 class Referrers(Resource):
     def get(self):
         counts = Counter()
         results = []
 
-        for hit in requests:
+        for hit in _requests:
             url = urlparse(hit.get('referrer', [''])[0].replace('"', '')).netloc
 
             if url[:4] == 'www.':
@@ -58,7 +58,7 @@ class Geo(Resource):
         results = []
         countries = Counter()
 
-        for hit in requests:
+        for hit in _requests:
             c = hit.get('geoip.country_code3', [''])[0]
             countries[c.upper()] += 1
 
@@ -82,7 +82,7 @@ class Bots(Resource):
         categories = Counter()
         total = 0
 
-        for req in requests:
+        for req in _requests:
             total += 1
             agent = user_agents.parse(req.get('agent', ['-'])[0].replace('"', ''))
             agents[agent.browser.family] += 1
@@ -115,7 +115,7 @@ class Path(Resource):
         results = []
         clients = Counter()
 
-        for req in requests:
+        for req in _requests:
             ip = req.get('clientip', ['-'])[0]
             clients[ip] += 1
         path =[]
@@ -236,7 +236,11 @@ class Unique(Resource):
             .filter("range", **{'@timestamp': {'gte': 'now-10d'}}) \
             .params(search_type="count")
             
-        day_aggregation = A('date_histogram', field='@timestamp', interval='day', format='yyyy-MM-dd')
+        day_aggregation = A('date_histogram',
+                            field='@timestamp',
+                            interval='day',
+                            format='yyyy-MM-dd')
+
         search.aggs.bucket('group_by_geoip', 'terms', field='geoip.ip', size=0)
         search.aggs['group_by_geoip'].bucket('per_day', day_aggregation)
 
@@ -249,6 +253,7 @@ class Unique(Resource):
             for val in per_day:
                 per_day_data['key'] = val['key_as_string']
                 per_day_data['count'] = val['doc_count']
+
             data[bucket['key']] = {
                  'count': bucket['doc_count'],
                  'per_day': per_day_data
@@ -271,6 +276,7 @@ class Unique(Resource):
                 'count' : v
             })
         
+        
         nonunique = {}    
         # NONUNIQUE   
         for k,v in data.iteritems():
@@ -279,7 +285,7 @@ class Unique(Resource):
             else:
                 nonunique[v['per_day']['key']] = v['count']
         
-        for k,v in unique.iteritems():       
+        for k,v in nonunique.iteritems():       
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
