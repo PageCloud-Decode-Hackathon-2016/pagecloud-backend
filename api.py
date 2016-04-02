@@ -166,8 +166,8 @@ class Pages(Resource):
 
         # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
         all_pages = {}
-        url = "http://pagecloud.com/"
-        manifest = requests.get(url + 'manifest.json')
+        url = "http://decode-2016.pagecloud.io/manifest.json"
+        manifest = requests.get(url)
         manifest = manifest.json()
 
         for i in range(len(manifest['pages'])):
@@ -190,16 +190,13 @@ class Pages(Resource):
             pages[p] += 1
 
         for page in pages.keys():
-            
-            # Sanitize page name format (remove all parameters after '?') to find modifiedDate
-            cleanPage = page
 
-            if cleanPage[1:] in all_pages.keys():
-                lm = all_pages[cleanPage[1:]]
-            elif cleanPage == '':
+            if page[1:] in all_pages.keys():
+                lm = all_pages[page[1:]]
+            elif page == '':
                 lm = all_pages['home']
             else:
-                lm = 0 # page could not be found in manifest list (might be referrer link!)
+                continue
            
             if lm > 0:
                 lm = datetime.datetime.fromtimestamp(lm / 1000).strftime("%Y-%m-%d")#T%H:%M:%S")
