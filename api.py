@@ -6,6 +6,7 @@ from elasticsearch_dsl import Search, Q, A
 from urlparse import urlparse
 from robot_detection import is_robot
 import requests
+import re
 
 app = Flask(__name__)
 api = Api(app)
@@ -158,7 +159,7 @@ class Pages(Resource):
         # return s.execute().to_dict()
 
         url = "http://decode-2016.pagecloud.io/"
-        all_pages = requests.get(url + 'manifest.json')
+        decodeManifest = requests.get(url + 'manifest.json')
 
         response = s.execute().to_dict()
         pages = Counter()
@@ -170,12 +171,15 @@ class Pages(Resource):
 
         for entry in pages:
             page, count = entry
+            
+
+            match = re.search('(.*)\?', page)
+            print match.group(1)
 
             results['data']['pages'].append(
                 {
                     'name': page,
-                    'hits': count,
-                    'responseReceived': str(r)#,
+                    'hits': count
                     # 'lastModified': "TODO"
                 })
 
