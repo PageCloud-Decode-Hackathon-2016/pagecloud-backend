@@ -113,6 +113,25 @@ class Bots(Resource):
 
 
 class Path(Resource):
+
+    def commonPath(list2d):
+        result = []
+        
+        firstList = list2d[0]
+        result.append(firstList)        
+        find = firstList[1]
+        
+        for i in range(1, len(list2d)):
+            if find == list2d[i][0]:
+                result.append(list2d[i][0])
+                find = list2d[i][0]
+        
+        for i in list2d:
+            if find == i[0]:
+                result.append(i)
+                
+        return results
+                
     def get(self):
         results = []
         clients = Counter()
@@ -274,7 +293,7 @@ class Unique(Resource):
             else:
                 nonunique[v['per_day']['key']] = v['count']
 
-        for k, v in unique.iteritems():
+        for k, v in nonunique.iteritems():
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
