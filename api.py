@@ -27,6 +27,7 @@ for hit in Search(using=client, index='production-logs-*')\
                  .scan():
     _requests.append(hit.to_dict())
 
+
 class Referrers(Resource):
     def get(self):
         counts = Counter()
@@ -40,10 +41,10 @@ class Referrers(Resource):
 
             counts[url.lower()] += 1
 
-        for referrer in counts.keys():
+        for key, val in counts.iteritems():
             results.append({
-                'name': referrer,
-                'count': counts[referrer]
+                'name': key,
+                'count': val
             })
 
         return {
@@ -62,10 +63,10 @@ class Geo(Resource):
             c = hit.get('geoip.country_code3', [''])[0]
             countries[c.upper()] += 1
 
-        for country in countries.keys():
+        for key, val in countries.iteritems():
             results.append({
-                'country': country,
-                'count': countries[country]
+                'country': key,
+                'count': val
             })
 
         return {
@@ -96,10 +97,10 @@ class Bots(Resource):
             elif agent.is_bot:
                 categories['bot'] += 1
 
-        for agent in agents.keys():
+        for key, valagent in agents.iteritems():
             results.append({
-                'name': agent,
-                'count': agents[agent]
+                'name': key,
+                'count': val
             })
 
         return {
@@ -109,6 +110,7 @@ class Bots(Resource):
                 'agents': results
             }
         }
+
 
 class Path(Resource):
     def get(self):
@@ -122,8 +124,8 @@ class Path(Resource):
 
         for visitor in clients.keys()[:100]:
             pages =[""]
-            s = Search(using=client, index='production-logs-*')\
-                 .fields(['clientip', 'request'])\
+            s = Search(using=client, index='production-logs-*') \
+                 .fields(['clientip', 'request']) \
                  .query('match', clientip=visitor)
 
             for page in s.scan():
@@ -132,16 +134,15 @@ class Path(Resource):
                 if not ((page.find('.') > -1) or (page == pages[len(pages) - 1])):
                     print "true"
                     pages.append(page)
+
             if len(pages) > 2:
                 path.append(pages)
 
         freqPath = Counter()
 
         for elem in path:
-            string =""
-            for x in elem:
-                string+= x+" "
-            freqPath[string]+=1
+            string = ' '.join(elem)
+            freqPath[string] += 1
 
         data = []
         for elem in freqPath.keys():
@@ -173,8 +174,8 @@ class Pages(Resource):
             all_pages[manifest['pages'][i]['name']] = manifest['pages'][i]['lastModified']
         
         # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['request'])\
+        s = Search(using=client, index='production-logs-*') \
+            .fields(['request']) \
             .query('match_all')
 
         for hit in s.scan():
@@ -218,16 +219,16 @@ class Pages(Resource):
             }
         }
 
+
 class Unique(Resource):
-    def get(self):    
-        
+    def get(self):
         more_data = {
         'data': {
             'nonunique': [],
              'unique': []
             }
         }
-                 
+
         index = 'production-logs-*'
 
         search = Search(using=client, index=index) \
@@ -235,7 +236,7 @@ class Unique(Resource):
             .query("match", http_host='decode-2016.pagecloud.io') \
             .filter("range", **{'@timestamp': {'gte': 'now-10d'}}) \
             .params(search_type="count")
-            
+
         day_aggregation = A('date_histogram',
                             field='@timestamp',
                             interval='day',
@@ -258,36 +259,33 @@ class Unique(Resource):
                  'count': bucket['doc_count'],
                  'per_day': per_day_data
              }
-        
+
         unique = {}
-        # UNIQUE
         for k, v in data.iteritems():
             if v['per_day']['key'] in unique:
                 unique[v['per_day']['key']] += 1
             else:
                 unique[v['per_day']['key']] = 1
 
-        for k,v in unique.iteritems():       
+        for k, v in unique.iteritems():
             more_data['data']['unique'].append({
                 'datetime' : k,
                 'count' : v
             })
-        
-        
-        nonunique = {}    
-        # NONUNIQUE   
-        for k,v in data.iteritems():
+
+        nonunique = {}
+        for k, v in data.iteritems():
             if v['per_day']['key'] in nonunique:
                 nonunique[v['per_day']['key']] += v['count']
             else:
                 nonunique[v['per_day']['key']] = v['count']
-        
-        for k,v in nonunique.iteritems():       
+
+        for k, v in unique.iteritems():
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
             })
-                                
+
         return more_data
 
 class AggregationTestResource(Resource):
