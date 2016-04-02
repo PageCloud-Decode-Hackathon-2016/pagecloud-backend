@@ -1,5 +1,4 @@
 from collections import Counter
-from collections import defaultdict
 from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
@@ -18,18 +17,21 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
-        counts = defaultdict(int)
+        counts = Counter()
         results = []
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
             .query('match_all')
 
-        response = s.execute().to_dict()
+        for hit in s.scan():
+            response = hit.to_dict()
+            url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
 
-        for hit in response['hits']['hits']:
-            url = urlparse(hit['fields']['referrer'][0].replace('"', '')).netloc
-            counts[url] = counts.get(url, 0) + 1
+            if url[:4] == 'www.':
+                url =  url[4:]
+
+            counts[url.lower()] += 1
 
         for site in counts.keys():
             results.append({
@@ -38,43 +40,65 @@ class Referrers(Resource):
             })
 
         return {
-            'data': results
+            'data': {
+                'referrers': results
+            }
         }
 
 class Geo(Resource):
     def get(self):
-        results = {
-        	'data': {
-        		'geo': []
-        	}
-        }
+        results = []
+        countries = Counter()
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['geoip.country_code3'])\
             .query('match_all')
 
-        response = s.execute().to_dict()
+        for hit in s.scan():
+            response = hit.to_dict()
+            c = response.get('geoip.country_code3', [''])[0]
+            countries[c.upper()] += 1
 
-        cntry = Counter()
+        for country in countries.keys():
+            results.append({
+                'country': country,
+                'count': countries[country]
+            })
 
-        for hit in response['hits']['hits']:
-            cntry[hit['fields']['geoip.country_code3'][0]] +=1
-
-        cntry = cntry.most_common(None)
-
-        for entry in cntry:
-            country, count = entry
-            results['data']['geo'].append(
-        		{
-        			'country': country,
-        			'count': count
-        		})
-
-        return results
+        return {
+            'data': {
+                'geo': results
+            }
+        }
 
 class Bots(Resource):
     def get(self):
-        pass
+        results = {
+                'data': {
+                    'bots': []
+                }
+        }
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['agent'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        agents = Counter()
+
+        for hit in response['hits']['hits']:
+            agents[hit['fields']['agent'][0]] +=1
+
+        agents = agents.most_common(None)
+
+        for entry in agents:
+            ageent, count = entry
+            results['data']['bots'].append({
+                'country': country,
+                'count': count
+            })
+
+        return results
 
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
