@@ -2,7 +2,7 @@ from collections import Counter
 from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search, Q
+from elasticsearch_dsl import Search, Q, A
 from urlparse import urlparse
 from robot_detection import is_robot
 
@@ -104,9 +104,9 @@ class Bots(Resource):
 class Path(Resource):
     def get(self):
         results = {
-        	'data': {
-        		'path': []
-        	}
+            'data': {
+                'path': []
+            }
         }
 
         s = Search(using=client, index='production-logs-*')\
@@ -121,6 +121,17 @@ class Path(Resource):
             pass
 
         return response
+
+        for entry in cntry:
+            country, count = entry
+            results['data']['geo'].append(
+                {
+                    'country': country,
+                    'count': count
+                })
+
+        return results
+
 
 
 # The most popular/visited pages on the website
@@ -158,51 +169,127 @@ class Pages(Resource):
         return results
 
 class Unique(Resource):
-    def get(self):
-    
-        results = {
-            'data':{
-                'unique':[],
-                'nonunique':[]
+    def get(self):    
+        
+        more_data = {
+        'data': {
+            'nonunique': [],
+             'unique': []
             }
         }
+                 
+        index = 'production-logs-*'
 
+        search = Search(using=client, index=index) \
+            .fields(['referrer', 'geoip.ip', 'http_host' ]) \
+            .query("match", http_host='decode-2016.pagecloud.io') \
+            .filter("range", **{'@timestamp': {'gte': 'now-10d'}}) \
+            .params(search_type="count")
+            
+        day_aggregation = A('date_histogram', field='@timestamp', interval='day', format='yyyy-MM-dd')
+        search.aggs.bucket('group_by_geoip', 'terms', field='geoip.ip', size=0)
+        search.aggs['group_by_geoip'].bucket('per_day', day_aggregation)
+
+        #raw_buckets = search.execute().aggregations['per_day']['buckets']
+        raw_buckets2 = search.execute().aggregations['group_by_geoip']['buckets']
+
+        data = {}
+        #for bucket in raw_buckets:
+            #data[bucket['key']] = bucket['doc_count']
+
+        data2 = {}
+        for bucket in raw_buckets2:
+            per_day = bucket['per_day']['buckets']
+            per_day_data = {}
+            for val in per_day:
+                per_day_data['key'] = val['key_as_string']
+                per_day_data['count'] = val['doc_count']
+            data2[bucket['key']] = {
+                 'count': bucket['doc_count'],
+                 'per_day': per_day_data
+             }
+        #return data2
+        
+        unique = {}
+        # UNIQUE
+        for k, v in data2.iteritems():
+            if v['per_day']['key'] in unique:
+                unique[v['per_day']['key']] += 1
+            else:
+                unique[v['per_day']['key']] = 1
+
+        for k,v in unique.iteritems():       
+            more_data['data']['unique'].append({
+                'datetime' : k,
+                'count' : v
+            })
+        
+        nonunique = {}    
+        # NONUNIQUE   
+        for k,v in data2.iteritems():
+            if v['per_day']['key'] in nonunique:
+                nonunique[v['per_day']['key']] += v['count']
+            else:
+                nonunique[v['per_day']['key']] = v['count']
+        
+        for k,v in unique.iteritems():       
+            more_data['data']['nonunique'].append({
+                'datetime' : k,
+                'count' : v
+            })
+                                
+        return more_data
+        
+        """
         # HOUR
         hourSearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        #.filter("range", **{'@timestamp': {'gte': 'now-1h'}})
+        .filter("range", **{'@timestamp': {'gte': 'now-1h'}})
         
-        hourDict = hourSearch.exclude().to_dict()['hits']['hits']
+        index = 0
+        hourList = []
+        for i in hourSearch.scan():
+            if i.to_dict().get('clientip'):
+                hourList.append(i.to_dict().get('clientip')[0])
+                index += 1
+
         results['data']['nonunique'].append({
             'datetime': 'hour',
-            'count': len(hourDict)
+            'count': index
         })
         
         hourCounter = Counter()
-        for i in hourDict:
-            hourCounter[i['fields']['clientip'][0]]+=1
+        for i in hourList:
+            hourCounter[i]+=1
         
         results['data']['unique'].append({
             'datetime': 'hour',
             'count': len(hourCounter)
         })
         
-         # DAY
+        # DAY
         daySearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        #.filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
+        .filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
         
-        dayDict = daySearch.exclude().to_dict()['hits']['hits']
+        index = 0
+        dayList = []
+        for i in daySearch.scan():    
+            if i.to_dict().get('clientip'):        
+                dayList.append(i.to_dict().get('clientip')[0])
+                index += 1
+            
         results['data']['nonunique'].append({
-            'datetime': 'days',
-            'count': len(dayDict)
+            'datetime': 'day',
+            'count': index
         })
         
         dayCounter = Counter()
-        for i in dayDict:
-            dayCounter[i['fields']['clientip'][0]]+=1
+        for i in dayList:
+            dayCounter[i]+=1
+        
         
         results['data']['unique'].append({
             'datetime': 'days',
@@ -213,31 +300,59 @@ class Unique(Resource):
         weekSearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        #.filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
+        .filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
         
-        weekDict = weekSearch.exclude().to_dict()['hits']['hits']
+        index = 0
+        weekList = []
+        for i in weekSearch.scan():
+            if i.to_dict().get('clientip'):
+                weekList.append(i.to_dict().get('clientip')[0])
+                index += 1
+
         results['data']['nonunique'].append({
             'datetime': 'week',
-            'count': len(weekDict)
+            'count': index
         })
-        
+               
         weekCounter = Counter()
-        for i in weekDict:
-            weekCounter[i['fields']['clientip'][0]]+=1
+        for i in weekList:
+            weekCounter[i]+=1
         
         results['data']['unique'].append({
             'datetime': 'week',
             'count': len(weekCounter)
         })
-
-        return results
         
+        return results
+        """
+class AggregationTestResource(Resource):
+    def get(self):
+        index = 'production-logs-*'
+
+        search = Search(using=client, index=index) \
+            .fields(['referrer', 'geoip.ip', 'http_host' ]) \
+            .query("match", http_host='decode-2016.pagecloud.io') \
+            .filter("range", **{'@timestamp': {'gte': 'now-7d'}}) \
+            .params(search_type="count")
+
+        day_aggregation = A('date_histogram', field='@timestamp', interval='hour', format='yyyy-MM-dd')
+        search.aggs.bucket('per_day', day_aggregation)
+
+        raw_buckets = search.execute().aggregations['per_day']['buckets']
+
+        data = {}
+        for bucket in raw_buckets:
+            data[bucket['key']] = bucket['doc_count']
+
+        return data
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Unique, '/unique')
 api.add_resource(Bots, '/bots')
 api.add_resource(Path, '/path')
 api.add_resource(Pages, '/pages')
+api.add_resource(AggregationTestResource, '/aggtest')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
