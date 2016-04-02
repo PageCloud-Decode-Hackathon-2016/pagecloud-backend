@@ -3,9 +3,8 @@ from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-import json
-
-
+from urlparse import urlparse
+from robot_detection import is_robot
 
 app = Flask(__name__)
 api = Api(app)
@@ -17,59 +16,144 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
 
 class Referrers(Resource):
     def get(self):
-        results = {
-        	'data': {
-        		'referrers': []
-        	}
-        }
-
-        # s = Search(using=client, index='production-logs-*')\
-        #     .fields(['agent', 'clientip', 'referrer', 'timestamp'])\
-        #     .query('match_all')
+        counts = Counter()
+        results = []
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['referrer'])\
             .query('match_all')
 
-        response = s.execute().to_dict()
+        for hit in s.scan():
+            response = hit.to_dict()
+            url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
 
-        for hit in response['hits']['hits']:
-        	results['data']['referrers'].append(
-        		{
-        			'name': hit['fields']['referrer'][0].replace('"', ''),
-        			'count': 21
-        		})
+            if url[:4] == 'www.':
+                url =  url[4:]
 
-        return results
+            counts[url.lower()] += 1
+
+        for referrer in counts.keys():
+            results.append({
+                'name': referrer,
+                'count': counts[referrer]
+            })
+
+        return {
+            'data': {
+                'referrers': results
+            }
+        }
 
 class Geo(Resource):
     def get(self):
-        results = {
-        	'data': {
-        		'geo': []
-        	}
-        }
+        results = []
+        countries = Counter()
 
         s = Search(using=client, index='production-logs-*')\
             .fields(['geoip.country_code3'])\
             .query('match_all')
 
-        response = s.execute().to_dict()
+        for hit in s.scan():
+            response = hit.to_dict()
+            c = response.get('geoip.country_code3', [''])[0]
+            countries[c.upper()] += 1
 
-        cntry = uniqueCounter()
+        for country in countries.keys():
+            results.append({
+                'country': country,
+                'count': countries[country]
+            })
+
+        return {
+            'data': {
+                'geo': results
+            }
+        }
+
+
+class Bots(Resource):
+    def get(self):
+        results = {
+            'data': {
+                'bots': []
+            }
+        }
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['agent'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        agents = Counter()
 
         for hit in response['hits']['hits']:
-            cntry[hit['fields']['geoip.country_code3'][0]] +=1
+            agents[hit['fields']['agent'][0]] +=1
 
-        cntry = cntry.most_common(None)
+        agents = agents.most_common(None)
 
-        for entry in cntry:
-            country, count = entry
-            results['data']['geo'].append(
-        		{
-        			'country': country,
-        			'count': count
-        		})
+        for entry in agents:
+            ageent, count = entry
+            results['data']['bots'].append({
+                'country': country,
+                'count': count
+            })
+
+        return results
+
+
+class Path(Resource):
+    def get(self):
+        results = {
+        	'data': {
+        		'path': []
+        	}
+        }
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request', 'clientip', 'timestamp'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        clientVisits = []
+
+        #Create Sequences by grouping Client IP
+        for request in response['hits']['hits']:
+            pass
+
+        return response
+
+
+# The most popular/visited pages on the website
+class Pages(Resource):
+# TODO: exclude bots, only check for page visits on UNIQUE visitors
+# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
+    def get(self):
+        results = {
+            'data': {
+                'pages': []
+            }
+        }
+        # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+        pages = Counter()
+
+        for hit in response['hits']['hits']:
+            pages[hit['fields']['request'][0]] +=1
+
+        pages = pages.most_common(None)
+
+        for entry in pages:
+            page, count = entry
+            results['data']['pages'].append(
+                {
+                    'name': page,
+                    'hits': count,
+                    'lastModified': 'IMPLEMENT ME' # how can we get page's last modified date?
+                })
 
         return results
 
@@ -87,9 +171,9 @@ class Unique(Resource):
         hourSearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-1h'}})
+        #.filter("range", **{'@timestamp': {'gte': 'now-1h'}})
         
-        hourDict = hourSearch.scan().to_dict()['hits']['hits']
+        hourDict = hourSearch.exclude().to_dict()['hits']['hits']
         results['data']['nonunique'].append({
             'datetime': 'hour',
             'count': len(hourDict)
@@ -108,9 +192,9 @@ class Unique(Resource):
         daySearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
+        #.filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
         
-        dayDict = daySearch.scan().to_dict()['hits']['hits']
+        dayDict = daySearch.exclude().to_dict()['hits']['hits']
         results['data']['nonunique'].append({
             'datetime': 'days',
             'count': len(dayDict)
@@ -129,9 +213,9 @@ class Unique(Resource):
         weekSearch = Search(using=client, index='production-logs-*')\
         .fields(['clientip','timestamp'])\
         .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
+        #.filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
         
-        weekDict = weekSearch.scan().to_dict()['hits']['hits']
+        weekDict = weekSearch.exclude().to_dict()['hits']['hits']
         results['data']['nonunique'].append({
             'datetime': 'week',
             'count': len(weekDict)
@@ -151,6 +235,9 @@ class Unique(Resource):
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Unique, '/unique')
+api.add_resource(Bots, '/bots')
+api.add_resource(Path, '/path')
+api.add_resource(Pages, '/pages')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
