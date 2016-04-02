@@ -169,21 +169,18 @@ class Pages(Resource):
 
         for entry in pages:
             page, count = entry
+
             if (page[-1] == '/'):
                 r = requests.get(url + page + 'manifest.json')
-                rx = url + page + 'manifest.json'
             else:
                 r = requests.get(url + page + '/manifest.json')
-                rx = url + page + '/manifest.json'
+            
             # lm = r.json()
             results['data']['pages'].append(
                 {
                     'name': page,
                     'hits': count,
                     'responseReceived': str(r),
-                    'testing': rx,
-                    'bla': page[-1]
-                    # 'lastModified': lm # how can we get page's last modified date?
                 })
 
         return results
