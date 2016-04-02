@@ -299,7 +299,7 @@ class Unique(Resource):
             else:
                 nonunique[v['per_day']['key']] = v['count']
 
-        for k, v in unique.iteritems():
+        for k, v in nonunique.iteritems():
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
