@@ -232,6 +232,7 @@ class Unique(Resource):
                 'count' : v
             })
         
+        
         nonunique = {}    
         # NONUNIQUE   
         for k,v in data.iteritems():
@@ -240,13 +241,13 @@ class Unique(Resource):
             else:
                 nonunique[v['per_day']['key']] = v['count']
         
-        for k,v in unique.iteritems():       
+        for k,v in nonunique.iteritems():       
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
             })
                                 
-        return more_data
+        #return more_data
 
 class AggregationTestResource(Resource):
     def get(self):
