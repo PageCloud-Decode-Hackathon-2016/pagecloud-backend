@@ -174,6 +174,12 @@ class Pages(Resource):
         for hit in s.scan():
             response = hit.to_dict()
             p = response.get('request', [''])[0]
+
+            # Sanitize page name format
+            if re.search('\?', p) != None:
+            	match = re.search('(.*)\?', p)
+            	p = match.group(1)
+
             pages[p] += 1
 
         for page in pages.keys():
@@ -184,11 +190,6 @@ class Pages(Resource):
                 lm = all_pages['home']
             else:
                 lm = 0 # page could not be found in manifest list (might be referrer link!)
-
-            # Sanitize page name format
-            if re.search('\?', page) != None:
-            	match = re.search('(.*)\?', page)
-            	page = match.group(1)
 
             results.append({
                 'name': page,
@@ -202,41 +203,6 @@ class Pages(Resource):
                 'pages': results
             }
         }
-
-        # for hit in response['hits']['hits']:
-        #     pages[hit['fields']['request'][0]] +=1
-
-        # pages = pages.most_common(None)
-
-        # for entry in pages:
-        #     page, count = entry
-
-        #     results['data']['pages'].append(
-        #         {
-        #             'name': page,
-        #             'hits': count,
-        #             'bla': manifest.json()['pages'][0]['name']
-        #             # 'lastModified': "TODO"
-        #         })
-
-        # for hit in s.scan():
-        #     response = hit.to_dict()
-        #     c = response.get('geoip.country_code3', [''])[0]
-        #     countries[c.upper()] += 1
-
-        # for country in countries.keys():
-        #     results.append({
-        #         'country': country,
-        #         'count': countries[country]
-        #     })
-
-        # return {
-        #     'data': {
-        #         'geo': results
-        #     }
-        # }
-
-        # return results
 
 
 class AggregationTestResource(Resource):
