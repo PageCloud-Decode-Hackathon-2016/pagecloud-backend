@@ -116,8 +116,8 @@ class Path(Resource):
             clients[ip] += 1
         path =[]
 
-        for visitor in clients.keys()[:40]:
-            pages =[]
+        for visitor in clients.keys()[:100]:
+            pages =[""]
             s = Search(using=client, index='production-logs-*')\
                  .fields(['clientip', 'request'])\
                  .query('match', clientip=visitor)
@@ -125,20 +125,24 @@ class Path(Resource):
             for page in s.scan():
                 page = page.to_dict().get('request', [''])[0]
                 print page
-                if not (page.find('.') > -1):
+                if not ((page.find('.') > -1) or (page == pages[len(pages) - 1])):
                     print "true"
                     pages.append(page)
-            path.append(pages)
+            if len(pages) > 2:
+                path.append(pages)
 
         freqPath = Counter()
 
         for elem in path:
-            freqPath['['+ ','.join(str('\''+ x + '\'') for x in elem)+']']+=1
+            string =""
+            for x in elem:
+                string+= x+" "
+            freqPath[string]+=1
 
         data = []
         for elem in freqPath.keys():
             data.append({
-                'node': elem[1:-1],
+                'nodes': elem.split(" ")[1:-1],
                 'count': freqPath[elem]
             })
 
