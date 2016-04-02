@@ -9,6 +9,7 @@ import time
 from urlparse import urlparse
 from robot_detection import is_robot
 import requests
+import datetime
 import re
 
 app = Flask(__name__)
@@ -154,19 +155,9 @@ class Path(Resource):
 # The most popular/visited pages on the website
 class Pages(Resource):
 # TODO: exclude bots, only check for page visits on UNIQUE visitors
-# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
-
-# HOW TO GET LAST DATE MODIFIED
-# 1. Access the page's /manifest.json
-# 2. Get the pages/lastModified datetime (using Python Requests)
-#   -> convert to dictionary and get the datetime, convert to a datetime object
     def get(self):
         pages = Counter()
         results = []
-
-        # NOTE: get the lastmodified dates from pagecloud
-        # but only get the data from decode-pagecloud
-        #  !!!!!
 
         # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
         all_pages = {}
@@ -182,9 +173,6 @@ class Pages(Resource):
             .fields(['request'])\
             .query('match_all')
 
-        url = "http://decode-2016.pagecloud.io/"
-        decodeManifest = requests.get(url + 'manifest.json')
-
         for hit in s.scan():
             response = hit.to_dict()
             p = response.get('request', [''])[0]
@@ -197,19 +185,27 @@ class Pages(Resource):
             pages[p] += 1
 
         for page in pages.keys():
-            if page[1:] in all_pages.keys():
-                # import pdb;pdb.set_trace() # <--- USE FOR DEBUGGING
-                lm = all_pages[page[1:]]
-            elif page == '':
+            
+            # Sanitize page name format (remove all parameters after '?') to find modifiedDate
+            cleanPage = page
+            if re.search('\?', page) != None:
+                match = re.search('(.*)\?', page)
+                cleanPage = match.group(1)
+
+            if cleanPage[1:] in all_pages.keys():
+                lm = all_pages[cleanPage[1:]]
+            elif cleanPage == '':
                 lm = all_pages['home']
             else:
                 lm = 0 # page could not be found in manifest list (might be referrer link!)
+           
+            if lm > 0:
+                lm = datetime.datetime.fromtimestamp(lm / 1000).strftime("%Y-%m-%d")#T%H:%M:%S")
 
             results.append({
                 'name': page,
                 'hits': pages[page],
                 'lastModified': lm
-
             })
 
         return {
@@ -261,6 +257,9 @@ class Unique(Resource):
                 unique[v['per_day']['key']] += 1
             else:
                 unique[v['per_day']['key']] = 1
+=======
+    # import pdb; pdb.set_trace() # <--- USE FOR DEBUGGING
+>>>>>>> 435d41df72cce5534d5071fe64be2f005c148dbc
 
         for k,v in unique.iteritems():       
             more_data['data']['unique'].append({
