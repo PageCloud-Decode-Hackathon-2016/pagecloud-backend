@@ -32,10 +32,10 @@ class Referrers(Resource):
 
             counts[url.lower()] += 1
 
-        for site in counts.keys():
+        for referrer in counts.keys():
             results.append({
-                'name': site,
-                'count': counts[site]
+                'name': referrer,
+                'count': counts[referrer]
             })
 
         return {
@@ -43,7 +43,6 @@ class Referrers(Resource):
                 'referrers': results
             }
         }
-
 
 class Geo(Resource):
     def get(self):
