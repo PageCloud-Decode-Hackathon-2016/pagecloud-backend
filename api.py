@@ -187,7 +187,8 @@ class Pages(Resource):
 
             # Sanitize page name format
             if re.search('\?', page) != None:
-            	page = re.search('(.*)\?', page)
+            	match = re.search('(.*)\?', page)
+            	page = match.group(1)
 
             results.append({
                 'name': page,
