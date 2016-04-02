@@ -21,4 +21,5 @@ static/js
 static/css
 static/config
 dump.rdb
+~vagrant
 .#*

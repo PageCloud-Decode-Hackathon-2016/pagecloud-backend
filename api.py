@@ -7,6 +7,10 @@ from flask_restful import Resource, Api
 import user_agents
 import time
 from urlparse import urlparse
+from robot_detection import is_robot
+import requests
+import datetime
+import re
 
 app = Flask(__name__)
 api = Api(app)
@@ -23,6 +27,7 @@ for hit in Search(using=client, index='production-logs-*')\
                  .scan():
     _requests.append(hit.to_dict())
 
+
 class Referrers(Resource):
     def get(self):
         counts = Counter()
@@ -36,10 +41,10 @@ class Referrers(Resource):
 
             counts[url.lower()] += 1
 
-        for referrer in counts.keys():
+        for key, val in counts.iteritems():
             results.append({
-                'name': referrer,
-                'count': counts[referrer]
+                'name': key,
+                'count': val
             })
 
         return {
@@ -58,10 +63,10 @@ class Geo(Resource):
             c = hit.get('geoip.country_code3', [''])[0]
             countries[c.upper()] += 1
 
-        for country in countries.keys():
+        for key, val in countries.iteritems():
             results.append({
-                'country': country,
-                'count': countries[country]
+                'country': key,
+                'count': val
             })
 
         return {
@@ -92,10 +97,10 @@ class Bots(Resource):
             elif agent.is_bot:
                 categories['bot'] += 1
 
-        for agent in agents.keys():
+        for key, val in agents.iteritems():
             results.append({
-                'name': agent,
-                'count': agents[agent]
+                'name': key,
+                'count': val
             })
 
         return {
@@ -105,6 +110,7 @@ class Bots(Resource):
                 'agents': results
             }
         }
+
 
 class Path(Resource):
 
@@ -137,8 +143,8 @@ class Path(Resource):
 
         for visitor in clients.keys()[:100]:
             pages =[""]
-            s = Search(using=client, index='production-logs-*')\
-                 .fields(['clientip', 'request'])\
+            s = Search(using=client, index='production-logs-*') \
+                 .fields(['clientip', 'request']) \
                  .query('match', clientip=visitor)
 
             for page in s.scan():
@@ -147,16 +153,15 @@ class Path(Resource):
                 if not ((page.find('.') > -1) or (page == pages[len(pages) - 1])):
                     print "true"
                     pages.append(page)
+
             if len(pages) > 2:
                 path.append(pages)
 
         freqPath = Counter()
 
         for elem in path:
-            string =""
-            for x in elem:
-                string+= x+" "
-            freqPath[string]+=1
+            string = ' '.join(elem)
+            freqPath[string] += 1
 
         data = []
         for elem in freqPath.keys():
@@ -174,47 +179,75 @@ class Path(Resource):
 # The most popular/visited pages on the website
 class Pages(Resource):
 # TODO: exclude bots, only check for page visits on UNIQUE visitors
-# list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
     def get(self):
-        results = {
-            'data': {
-                'pages': []
-            }
-        }
+        pages = Counter()
+        results = []
+
+        # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
+        all_pages = {}
+        url = "http://pagecloud.com/"
+        manifest = requests.get(url + 'manifest.json')
+        manifest = manifest.json()
+
+        for i in range(len(manifest['pages'])):
+            all_pages[manifest['pages'][i]['name']] = manifest['pages'][i]['lastModified']
+        
         # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['request'])\
+        s = Search(using=client, index='production-logs-*') \
+            .fields(['request']) \
             .query('match_all')
 
-        response = s.execute().to_dict()
-        pages = Counter()
+        for hit in s.scan():
+            response = hit.to_dict()
+            p = response.get('request', [''])[0]
 
-        for hit in response['hits']['hits']:
-            pages[hit['fields']['request'][0]] +=1
+            # Sanitize page name format
+            if re.search('\?', p) != None:
+            	match = re.search('(.*)\?', p)
+            	p = match.group(1)
 
-        pages = pages.most_common(None)
+            pages[p] += 1
 
-        for entry in pages:
-            page, count = entry
-            results['data']['pages'].append(
-                {
-                    'name': page,
-                    'hits': count,
-                    'lastModified': 'IMPLEMENT ME' # how can we get page's last modified date?
-                })
+        for page in pages.keys():
+            
+            # Sanitize page name format (remove all parameters after '?') to find modifiedDate
+            cleanPage = page
+            if re.search('\?', page) != None:
+                match = re.search('(.*)\?', page)
+                cleanPage = match.group(1)
 
-        return results
+            if cleanPage[1:] in all_pages.keys():
+                lm = all_pages[cleanPage[1:]]
+            elif cleanPage == '':
+                lm = all_pages['home']
+            else:
+                lm = 0 # page could not be found in manifest list (might be referrer link!)
+           
+            if lm > 0:
+                lm = datetime.datetime.fromtimestamp(lm / 1000).strftime("%Y-%m-%d")#T%H:%M:%S")
+
+            results.append({
+                'name': page,
+                'hits': pages[page],
+                'lastModified': lm
+            })
+
+        return {
+            'data': {
+                'pages': results
+            }
+        }
+
 
 class Unique(Resource):
-    def get(self):    
-        
+    def get(self):
         more_data = {
         'data': {
             'nonunique': [],
              'unique': []
             }
         }
-                 
+
         index = 'production-logs-*'
 
         search = Search(using=client, index=index) \
@@ -222,7 +255,7 @@ class Unique(Resource):
             .query("match", http_host='decode-2016.pagecloud.io') \
             .filter("range", **{'@timestamp': {'gte': 'now-10d'}}) \
             .params(search_type="count")
-            
+
         day_aggregation = A('date_histogram',
                             field='@timestamp',
                             interval='day',
@@ -245,36 +278,33 @@ class Unique(Resource):
                  'count': bucket['doc_count'],
                  'per_day': per_day_data
              }
-        
+
         unique = {}
-        # UNIQUE
         for k, v in data.iteritems():
             if v['per_day']['key'] in unique:
                 unique[v['per_day']['key']] += 1
             else:
                 unique[v['per_day']['key']] = 1
 
-        for k,v in unique.iteritems():       
+        for k, v in unique.iteritems():
             more_data['data']['unique'].append({
                 'datetime' : k,
                 'count' : v
             })
-        
-        
-        nonunique = {}    
-        # NONUNIQUE   
-        for k,v in data.iteritems():
+
+        nonunique = {}
+        for k, v in data.iteritems():
             if v['per_day']['key'] in nonunique:
                 nonunique[v['per_day']['key']] += v['count']
             else:
                 nonunique[v['per_day']['key']] = v['count']
-        
-        for k,v in nonunique.iteritems():       
+
+        for k, v in unique.iteritems():
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
             })
-                                
+
         return more_data
 
 class AggregationTestResource(Resource):
