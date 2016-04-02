@@ -97,7 +97,7 @@ class Bots(Resource):
             elif agent.is_bot:
                 categories['bot'] += 1
 
-        for key, valagent in agents.iteritems():
+        for key, val in agents.iteritems():
             results.append({
                 'name': key,
                 'count': valagent
@@ -188,8 +188,8 @@ class Pages(Resource):
 
         # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
         all_pages = {}
-        url = "http://pagecloud.com/"
-        manifest = requests.get(url + 'manifest.json')
+        url = "http://decode-2016.pagecloud.io/manifest.json"
+        manifest = requests.get(url)
         manifest = manifest.json()
 
         for i in range(len(manifest['pages'])):
@@ -212,19 +212,13 @@ class Pages(Resource):
             pages[p] += 1
 
         for page in pages.keys():
-            
-            # Sanitize page name format (remove all parameters after '?') to find modifiedDate
-            cleanPage = page
-            if re.search('\?', page) != None:
-                match = re.search('(.*)\?', page)
-                cleanPage = match.group(1)
 
-            if cleanPage[1:] in all_pages.keys():
-                lm = all_pages[cleanPage[1:]]
-            elif cleanPage == '':
+            if page[1:] in all_pages.keys():
+                lm = all_pages[page[1:]]
+            elif page == '':
                 lm = all_pages['home']
             else:
-                lm = 0 # page could not be found in manifest list (might be referrer link!)
+                continue
            
             if lm > 0:
                 lm = datetime.datetime.fromtimestamp(lm / 1000).strftime("%Y-%m-%d")#T%H:%M:%S")
@@ -302,7 +296,7 @@ class Unique(Resource):
             else:
                 nonunique[v['per_day']['key']] = v['count']
 
-        for k, v in unique.iteritems():
+        for k, v in nonunique.iteritems():
             more_data['data']['nonunique'].append({
                 'datetime' : k,
                 'count' : v
