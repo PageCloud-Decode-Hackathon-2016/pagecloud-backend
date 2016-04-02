@@ -1,10 +1,12 @@
+from collections import defaultdict
 from collections import Counter
-from flask import Flask
-from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q, A
+from flask import Flask
+from flask_restful import Resource, Api
+import user_agents
+import time
 from urlparse import urlparse
-from robot_detection import is_robot
 
 app = Flask(__name__)
 api = Api(app)
@@ -14,18 +16,20 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
                        use_ssl=True,
                        verify_certs=False)
 
+requests = []
+for hit in Search(using=client, index='production-logs-*')\
+                 .fields(['referrer', 'agent', 'geoip.country_code3', 'clientip'])\
+                 .query('match_all')\
+                 .scan():
+    requests.append(hit.to_dict())
+
 class Referrers(Resource):
     def get(self):
         counts = Counter()
         results = []
 
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['referrer'])\
-            .query('match_all')
-
-        for hit in s.scan():
-            response = hit.to_dict()
-            url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
+        for hit in requests:
+            url = urlparse(hit.get('referrer', [''])[0].replace('"', '')).netloc
 
             if url[:4] == 'www.':
                 url =  url[4:]
@@ -44,18 +48,14 @@ class Referrers(Resource):
             }
         }
 
+
 class Geo(Resource):
     def get(self):
         results = []
         countries = Counter()
 
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['geoip.country_code3'])\
-            .query('match_all')
-
-        for hit in s.scan():
-            response = hit.to_dict()
-            c = response.get('geoip.country_code3', [''])[0]
+        for hit in requests:
+            c = hit.get('geoip.country_code3', [''])[0]
             countries[c.upper()] += 1
 
         for country in countries.keys():
@@ -73,66 +73,80 @@ class Geo(Resource):
 
 class Bots(Resource):
     def get(self):
-        results = {
-            'data': {
-                'bots': []
-            }
-        }
-
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['agent'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
+        results = []
         agents = Counter()
+        categories = Counter()
+        total = 0
 
-        for hit in response['hits']['hits']:
-            agents[hit['fields']['agent'][0]] +=1
+        for req in requests:
+            total += 1
+            agent = user_agents.parse(req.get('agent', ['-'])[0].replace('"', ''))
+            agents[agent.browser.family] += 1
 
-        agents = agents.most_common(None)
+            if agent.is_mobile:
+                categories['mobile'] += 1
+            elif agent.is_tablet:
+                categories['tablet'] += 1
+            elif agent.is_pc:
+                categories['pc'] += 1
+            elif agent.is_bot:
+                categories['bot'] += 1
 
-        for entry in agents:
-            ageent, count = entry
-            results['data']['bots'].append({
-                'country': country,
-                'count': count
+        for agent in agents.keys():
+            results.append({
+                'name': agent,
+                'count': agents[agent]
             })
 
-        return results
-
+        return {
+            'data': {
+                'count': sum(categories.values()),
+                'categories': categories,
+                'agents': results
+            }
+        }
 
 class Path(Resource):
     def get(self):
-        results = {
+        results = []
+        clients = Counter()
+
+        for req in requests:
+            ip = req.get('clientip', ['-'])[0]
+            clients[ip] += 1
+        path =[]
+
+        for visitor in clients.keys()[:40]:
+            pages =[]
+            s = Search(using=client, index='production-logs-*')\
+                 .fields(['clientip', 'request'])\
+                 .query('match', clientip=visitor)
+
+            for page in s.scan():
+                page = page.to_dict().get('request', [''])[0]
+                print page
+                if not (page.find('.') > -1):
+                    print "true"
+                    pages.append(page)
+            path.append(pages)
+
+        freqPath = Counter()
+
+        for elem in path:
+            freqPath['['+ ','.join(str('\''+ x + '\'') for x in elem)+']']+=1
+
+        data = []
+        for elem in freqPath.keys():
+            data.append({
+                'node': elem[1:-1],
+                'count': freqPath[elem]
+            })
+
+        return {
             'data': {
-                'path': []
+                'path': data
             }
         }
-
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['request', 'clientip', 'timestamp'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
-        clientVisits = []
-
-        #Create Sequences by grouping Client IP
-        for request in response['hits']['hits']:
-            pass
-
-        return response
-
-        for entry in cntry:
-            country, count = entry
-            results['data']['geo'].append(
-                {
-                    'country': country,
-                    'count': count
-                })
-
-        return results
-
-
 
 # The most popular/visited pages on the website
 class Pages(Resource):
@@ -190,29 +204,23 @@ class Unique(Resource):
         search.aggs.bucket('group_by_geoip', 'terms', field='geoip.ip', size=0)
         search.aggs['group_by_geoip'].bucket('per_day', day_aggregation)
 
-        #raw_buckets = search.execute().aggregations['per_day']['buckets']
-        raw_buckets2 = search.execute().aggregations['group_by_geoip']['buckets']
+        raw_buckets = search.execute().aggregations['group_by_geoip']['buckets']
 
         data = {}
-        #for bucket in raw_buckets:
-            #data[bucket['key']] = bucket['doc_count']
-
-        data2 = {}
-        for bucket in raw_buckets2:
+        for bucket in raw_buckets:
             per_day = bucket['per_day']['buckets']
             per_day_data = {}
             for val in per_day:
                 per_day_data['key'] = val['key_as_string']
                 per_day_data['count'] = val['doc_count']
-            data2[bucket['key']] = {
+            data[bucket['key']] = {
                  'count': bucket['doc_count'],
                  'per_day': per_day_data
              }
-        #return data2
         
         unique = {}
         # UNIQUE
-        for k, v in data2.iteritems():
+        for k, v in data.iteritems():
             if v['per_day']['key'] in unique:
                 unique[v['per_day']['key']] += 1
             else:
@@ -226,7 +234,7 @@ class Unique(Resource):
         
         nonunique = {}    
         # NONUNIQUE   
-        for k,v in data2.iteritems():
+        for k,v in data.iteritems():
             if v['per_day']['key'] in nonunique:
                 nonunique[v['per_day']['key']] += v['count']
             else:
@@ -239,92 +247,7 @@ class Unique(Resource):
             })
                                 
         return more_data
-        
-        """
-        # HOUR
-        hourSearch = Search(using=client, index='production-logs-*')\
-        .fields(['clientip','timestamp'])\
-        .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-1h'}})
-        
-        index = 0
-        hourList = []
-        for i in hourSearch.scan():
-            if i.to_dict().get('clientip'):
-                hourList.append(i.to_dict().get('clientip')[0])
-                index += 1
 
-        results['data']['nonunique'].append({
-            'datetime': 'hour',
-            'count': index
-        })
-        
-        hourCounter = Counter()
-        for i in hourList:
-            hourCounter[i]+=1
-        
-        results['data']['unique'].append({
-            'datetime': 'hour',
-            'count': len(hourCounter)
-        })
-        
-        # DAY
-        daySearch = Search(using=client, index='production-logs-*')\
-        .fields(['clientip','timestamp'])\
-        .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-1d/d'}})
-        
-        index = 0
-        dayList = []
-        for i in daySearch.scan():    
-            if i.to_dict().get('clientip'):        
-                dayList.append(i.to_dict().get('clientip')[0])
-                index += 1
-            
-        results['data']['nonunique'].append({
-            'datetime': 'day',
-            'count': index
-        })
-        
-        dayCounter = Counter()
-        for i in dayList:
-            dayCounter[i]+=1
-        
-        
-        results['data']['unique'].append({
-            'datetime': 'days',
-            'count': len(dayCounter)
-        })
-        
-        # WEEK 
-        weekSearch = Search(using=client, index='production-logs-*')\
-        .fields(['clientip','timestamp'])\
-        .query('match_all')\
-        .filter("range", **{'@timestamp': {'gte': 'now-7d/d'}})
-        
-        index = 0
-        weekList = []
-        for i in weekSearch.scan():
-            if i.to_dict().get('clientip'):
-                weekList.append(i.to_dict().get('clientip')[0])
-                index += 1
-
-        results['data']['nonunique'].append({
-            'datetime': 'week',
-            'count': index
-        })
-               
-        weekCounter = Counter()
-        for i in weekList:
-            weekCounter[i]+=1
-        
-        results['data']['unique'].append({
-            'datetime': 'week',
-            'count': len(weekCounter)
-        })
-        
-        return results
-        """
 class AggregationTestResource(Resource):
     def get(self):
         index = 'production-logs-*'
@@ -355,4 +278,4 @@ api.add_resource(Pages, '/pages')
 api.add_resource(AggregationTestResource, '/aggtest')
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+    app.run(host='0.0.0.0', debug=True)
