@@ -107,6 +107,11 @@ class Bots(Resource):
         }
 
 class Path(Resource):
+    def commonPath(self, trace):
+    
+
+        return trace
+
     def get(self):
         results = []
         clients = Counter()
@@ -114,8 +119,8 @@ class Path(Resource):
         for req in requests:
             ip = req.get('clientip', ['-'])[0]
             clients[ip] += 1
-        path =[]
 
+        freqPath = Counter()
         for visitor in clients.keys()[:100]:
             pages =[""]
             s = Search(using=client, index='production-logs-*')\
@@ -129,22 +134,24 @@ class Path(Resource):
                     print "true"
                     pages.append(page)
             if len(pages) > 2:
-                path.append(pages)
+                for x in range(0, len(pages)-1):
+                    freqPath[str(pages[x]+ " "+ pages[x+1])]+=1
 
-        freqPath = Counter()
+        sorted = freqPath.most_common()
+        commonTrace =[]
+        for elem in sorted:
+            x,y = elem
+            commonTrace.append(x.split(" "))
 
-        for elem in path:
-            string =""
-            for x in elem:
-                string+= x+" "
-            freqPath[string]+=1
-
+        soln = self.commonPath(commonTrace)
+        rank = 1
         data = []
-        for elem in freqPath.keys():
+        for elem in soln:
             data.append({
-                'nodes': elem.split(" ")[1:-1],
-                'count': freqPath[elem]
+                'nodes': elem,
+                'count': rank
             })
+            rank+=1
 
         return {
             'data': {
