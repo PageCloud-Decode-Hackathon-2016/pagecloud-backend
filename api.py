@@ -266,9 +266,6 @@ class Unique(Resource):
                 unique[v['per_day']['key']] += 1
             else:
                 unique[v['per_day']['key']] = 1
-=======
-    # import pdb; pdb.set_trace() # <--- USE FOR DEBUGGING
->>>>>>> 435d41df72cce5534d5071fe64be2f005c148dbc
 
         for k,v in unique.iteritems():       
             more_data['data']['unique'].append({
