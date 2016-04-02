@@ -192,9 +192,6 @@ class Pages(Resource):
             
             # Sanitize page name format (remove all parameters after '?') to find modifiedDate
             cleanPage = page
-            if re.search('\?', page) != None:
-                match = re.search('(.*)\?', page)
-                cleanPage = match.group(1)
 
             if cleanPage[1:] in all_pages.keys():
                 lm = all_pages[cleanPage[1:]]
