@@ -147,43 +147,95 @@ class Pages(Resource):
 # 2. Get the pages/lastModified datetime (using Python Requests)
 #   -> convert to dictionary and get the datetime, convert to a datetime object
     def get(self):
-        results = {
-            'data': {
-                'pages': []
-            }
-        }
+        pages = Counter()
+        results = []
+
+        # NOTE: get the lastmodified dates from pagecloud
+        # but only get the data from decode-pagecloud
+        #  !!!!!
+
+        # GET A LIST OF ALL THE WEBSITE'S PAGES AND THEIR LAST MODIFIED DATE
+        all_pages = {}
+        url = "http://pagecloud.com/"
+        manifest = requests.get(url + 'manifest.json')
+        manifest = manifest.json()
+
+        for i in range(len(manifest['pages'])):
+            all_pages[manifest['pages'][i]['name']] = manifest['pages'][i]['lastModified']
+        
         # e.g. www.domain.com/page/ <-- 'request' provides you with '/page'
         s = Search(using=client, index='production-logs-*')\
             .fields(['request'])\
             .query('match_all')
-        # return s.execute().to_dict()
 
         url = "http://decode-2016.pagecloud.io/"
         decodeManifest = requests.get(url + 'manifest.json')
 
-        response = s.execute().to_dict()
-        pages = Counter()
+        for hit in s.scan():
+            response = hit.to_dict()
+            p = response.get('request', [''])[0]
+            pages[p] += 1
 
-        for hit in response['hits']['hits']:
-            pages[hit['fields']['request'][0]] +=1
+        for page in pages.keys():
+            if page[1:] in all_pages.keys():
+                # import pdb;pdb.set_trace() # <--- USE FOR DEBUGGING
+                lm = all_pages[page[1:]]
+            elif page == '':
+                lm = all_pages['home']
+            else:
+                lm = 0 # page could not be found in manifest list (might be referrer link!)
 
-        pages = pages.most_common(None)
+            # Sanitize page name format
+            if re.search('\?', page) != None:
+            	page = re.search('(.*)\?', page)
 
-        for entry in pages:
-            page, count = entry
-            
+            results.append({
+                'name': page,
+                'hits': pages[page],
+                'lastModified': lm
 
-            match = re.search('(.*)\?', page)
-            print match.group(1)
+            })
 
-            results['data']['pages'].append(
-                {
-                    'name': page,
-                    'hits': count
-                    # 'lastModified': "TODO"
-                })
+        return {
+            'data': {
+                'pages': results
+            }
+        }
 
-        return results
+        # for hit in response['hits']['hits']:
+        #     pages[hit['fields']['request'][0]] +=1
+
+        # pages = pages.most_common(None)
+
+        # for entry in pages:
+        #     page, count = entry
+
+        #     results['data']['pages'].append(
+        #         {
+        #             'name': page,
+        #             'hits': count,
+        #             'bla': manifest.json()['pages'][0]['name']
+        #             # 'lastModified': "TODO"
+        #         })
+
+        # for hit in s.scan():
+        #     response = hit.to_dict()
+        #     c = response.get('geoip.country_code3', [''])[0]
+        #     countries[c.upper()] += 1
+
+        # for country in countries.keys():
+        #     results.append({
+        #         'country': country,
+        #         'count': countries[country]
+        #     })
+
+        # return {
+        #     'data': {
+        #         'geo': results
+        #     }
+        # }
+
+        # return results
 
 
 class AggregationTestResource(Resource):
