@@ -97,7 +97,7 @@ class Bots(Resource):
             elif agent.is_bot:
                 categories['bot'] += 1
 
-        for key, valagent in agents.iteritems():
+        for key, val in agents.iteritems():
             results.append({
                 'name': key,
                 'count': val
