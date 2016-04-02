@@ -251,7 +251,7 @@ class Unique(Resource):
                 'count' : v
             })
                                 
-        #return more_data
+        return more_data
 
 class AggregationTestResource(Resource):
     def get(self):
