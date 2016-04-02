@@ -2,7 +2,7 @@ from collections import Counter
 from flask import Flask
 from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search, Q
+from elasticsearch_dsl import Search, Q, A
 from urlparse import urlparse
 from robot_detection import is_robot
 
@@ -104,9 +104,9 @@ class Bots(Resource):
 class Path(Resource):
     def get(self):
         results = {
-        	'data': {
-        		'path': []
-        	}
+            'data': {
+                'path': []
+            }
         }
 
         s = Search(using=client, index='production-logs-*')\
@@ -122,6 +122,17 @@ class Path(Resource):
             pass
 
         return response
+
+        for entry in cntry:
+            country, count = entry
+            results['data']['geo'].append(
+                {
+                    'country': country,
+                    'count': count
+                })
+
+        return results
+
 
 
 # The most popular/visited pages on the website
@@ -158,11 +169,34 @@ class Pages(Resource):
 
         return results
 
+
+class AggregationTestResource(Resource):
+    def get(self):
+        index = 'production-logs-*'
+
+        search = Search(using=client, index=index) \
+            .fields(['referrer', 'geoip.ip', 'http_host' ]) \
+            .query("match", http_host='decode-2016.pagecloud.io') \
+            .filter("range", **{'@timestamp': {'gte': 'now-7d'}}) \
+            .params(search_type="count")
+
+        day_aggregation = A('date_histogram', field='@timestamp', interval='hour', format='yyyy-MM-dd')
+        search.aggs.bucket('per_day', day_aggregation)
+
+        raw_buckets = search.execute().aggregations['per_day']['buckets']
+
+        data = {}
+        for bucket in raw_buckets:
+            data[bucket['key']] = bucket['doc_count']
+
+        return data
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Bots, '/bots')
 api.add_resource(Path, '/path')
 api.add_resource(Pages, '/pages')
+api.add_resource(AggregationTestResource, '/aggtest')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
