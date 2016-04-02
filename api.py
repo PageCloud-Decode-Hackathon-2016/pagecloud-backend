@@ -92,19 +92,6 @@ class Bots(Resource):
                 'count': agents[agent]
             })
 
-        return {
-            'data': {
-                'bots': {
-                    'count': len(results),
-                    'data': results
-                },
-                'users': {
-                    'count': total - len(results)
-                }
-            }
-        }
-
-
 class Path(Resource):
     def get(self):
         results = {
