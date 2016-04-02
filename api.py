@@ -157,7 +157,8 @@ class Pages(Resource):
             .query('match_all')
         # return s.execute().to_dict()
 
-        url = "http://decode-2016.pagecloud.io"
+        url = "http://decode-2016.pagecloud.io/"
+        all_pages = requests.get(url + 'manifest.json')
 
         response = s.execute().to_dict()
         pages = Counter()
@@ -170,17 +171,12 @@ class Pages(Resource):
         for entry in pages:
             page, count = entry
 
-            if (page[-1] == '/'):
-                r = requests.get(url + page + 'manifest.json')
-            else:
-                r = requests.get(url + page + '/manifest.json')
-            
-            # lm = r.json()
             results['data']['pages'].append(
                 {
                     'name': page,
                     'hits': count,
-                    'responseReceived': str(r),
+                    'responseReceived': str(r)#,
+                    # 'lastModified': "TODO"
                 })
 
         return results
