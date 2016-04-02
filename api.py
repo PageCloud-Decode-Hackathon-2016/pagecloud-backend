@@ -121,7 +121,7 @@ class Path(Resource):
         result.append(firstList)        
         find = firstList[1]
         
-        for i in range(1, len(list2d):
+        for i in range(1, len(list2d)):
             if find == list2d[i][0]:
                 result.append(list2d[i][0])
                 find = list2d[i][0]
