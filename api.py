@@ -5,6 +5,7 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q, A
 from urlparse import urlparse
 from robot_detection import is_robot
+import requests
 
 app = Flask(__name__)
 api = Api(app)
@@ -139,6 +140,11 @@ class Path(Resource):
 class Pages(Resource):
 # TODO: exclude bots, only check for page visits on UNIQUE visitors
 # list of user agents -> https://github.com/monperrus/crawler-user-agents/blob/master/crawler-user-agents.json
+
+# HOW TO GET LAST DATE MODIFIED
+# 1. Access the page's /manifest.json
+# 2. Get the pages/lastModified datetime (using Python Requests)
+#   -> convert to dictionary and get the datetime, convert to a datetime object
     def get(self):
         results = {
             'data': {
@@ -149,6 +155,9 @@ class Pages(Resource):
         s = Search(using=client, index='production-logs-*')\
             .fields(['request'])\
             .query('match_all')
+        # return s.execute().to_dict()
+
+        url = "http://decode-2016.pagecloud.io"
 
         response = s.execute().to_dict()
         pages = Counter()
@@ -160,11 +169,21 @@ class Pages(Resource):
 
         for entry in pages:
             page, count = entry
+            if (page[-1] == '/'):
+                r = requests.get(url + page + 'manifest.json')
+                rx = url + page + 'manifest.json'
+            else:
+                r = requests.get(url + page + '/manifest.json')
+                rx = url + page + '/manifest.json'
+            # lm = r.json()
             results['data']['pages'].append(
                 {
                     'name': page,
                     'hits': count,
-                    'lastModified': 'IMPLEMENT ME' # how can we get page's last modified date?
+                    'responseReceived': str(r),
+                    'testing': rx,
+                    'bla': page[-1]
+                    # 'lastModified': lm # how can we get page's last modified date?
                 })
 
         return results
