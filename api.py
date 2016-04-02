@@ -1,10 +1,12 @@
+from collections import defaultdict
 from collections import Counter
-from flask import Flask
-from flask_restful import Resource, Api
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-from urlparse import urlparse
+from flask import Flask
+from flask_restful import Resource, Api
 from robot_detection import is_robot
+import time
+from urlparse import urlparse
 
 app = Flask(__name__)
 api = Api(app)
@@ -14,18 +16,20 @@ client = Elasticsearch(host='search-pagecloud-legacy-decode-2016-oijvlfnyaac4p6h
                        use_ssl=True,
                        verify_certs=False)
 
+requests = []
+for hit in Search(using=client, index='production-logs-*')\
+                 .fields(['referrer', 'agent', 'geoip.country_code3'])\
+                 .query('match_all')\
+                 .scan():
+    requests.append(hit.to_dict())
+
 class Referrers(Resource):
     def get(self):
         counts = Counter()
         results = []
 
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['referrer'])\
-            .query('match_all')
-
-        for hit in s.scan():
-            response = hit.to_dict()
-            url = urlparse(response.get('referrer', [''])[0].replace('"', '')).netloc
+        for hit in requests:
+            url = urlparse(hit.get('referrer', [''])[0].replace('"', '')).netloc
 
             if url[:4] == 'www.':
                 url =  url[4:]
@@ -44,18 +48,14 @@ class Referrers(Resource):
             }
         }
 
+
 class Geo(Resource):
     def get(self):
         results = []
         countries = Counter()
 
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['geoip.country_code3'])\
-            .query('match_all')
-
-        for hit in s.scan():
-            response = hit.to_dict()
-            c = response.get('geoip.country_code3', [''])[0]
+        for hit in requests:
+            c = hit.get('geoip.country_code3', [''])[0]
             countries[c.upper()] += 1
 
         for country in countries.keys():
@@ -73,32 +73,36 @@ class Geo(Resource):
 
 class Bots(Resource):
     def get(self):
-        results = {
-            'data': {
-                'bots': []
-            }
-        }
-
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['agent'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
+        results = []
         agents = Counter()
+        total = 0
 
-        for hit in response['hits']['hits']:
-            agents[hit['fields']['agent'][0]] +=1
+        for req in requests:
+            total += 1
+            agent = req.get('agent', ['-'])[0].replace('"', '')
 
-        agents = agents.most_common(None)
+            if is_robot(agent) == False:
+                continue
 
-        for entry in agents:
-            ageent, count = entry
-            results['data']['bots'].append({
-                'country': country,
-                'count': count
+            agents[agent] += 1
+
+        for agent in agents.keys():
+            results.append({
+                'name': agent,
+                'count': agents[agent]
             })
 
-        return results
+        return {
+            'data': {
+                'bots': {
+                    'count': len(results),
+                    'data': results
+                },
+                'users': {
+                    'count': total - len(results)
+                }
+            }
+        }
 
 
 # The most popular/visited pages on the website
