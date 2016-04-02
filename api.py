@@ -136,10 +136,33 @@ class Pages(Resource):
 
         return results
 
+class Path(Resource):
+    def get(self):
+        results = {
+        	'data': {
+        		'path': []
+        	}
+        }
+
+        s = Search(using=client, index='production-logs-*')\
+            .fields(['request', 'clientip', 'timestamp'])\
+            .query('match_all')
+
+        response = s.execute().to_dict()
+
+        clientVisits = []
+
+        #Create Sequences by grouping Client IP
+        for request in response['hits']['hits']:
+
+        #
+        return response
+
 api.add_resource(Referrers, '/referrers')
 api.add_resource(Geo, '/geo')
 api.add_resource(Bots, '/bots')
 api.add_resource(Pages, '/pages')
+api.add_resource(Path, '/path')
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0',debug=True)
