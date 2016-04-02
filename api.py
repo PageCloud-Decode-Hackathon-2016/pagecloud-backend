@@ -135,6 +135,7 @@ class Pages(Resource):
 
         return results
 
+
 class Path(Resource):
     def get(self):
         results = {
@@ -153,30 +154,10 @@ class Path(Resource):
 
         #Create Sequences by grouping Client IP
         for request in response['hits']['hits']:
+            pass
 
-        #
         return response
 
-class Path(Resource):
-    def get(self):
-        results = {
-        	'data': {
-        		'path': []
-        	}
-        }
-
-        s = Search(using=client, index='production-logs-*')\
-            .fields(['request', 'clientip', 'timestamp'])\
-            .query('match_all')
-
-        response = s.execute().to_dict()
-
-        clientVisits = []
-
-        #Create Sequences by grouping Client IP
-
-        #
-        return response
 
 # The most popular/visited pages on the website
 class Pages(Resource):
